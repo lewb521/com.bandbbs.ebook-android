@@ -28,6 +28,10 @@
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## 安装包
+
+仓库根目录 `release/` 提供已签名 APK（`com.bandbbs.ebook-android-3.0.25.5.27.apk`），可直接安装。
+
 ## 开源许可
 
 AGPL-3.0，详见 [LICENSE](./LICENSE)。

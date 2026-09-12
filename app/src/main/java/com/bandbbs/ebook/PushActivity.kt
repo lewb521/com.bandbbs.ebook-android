@@ -1,6 +1,7 @@
 package com.bandbbs.ebook
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,7 +51,6 @@ class PushActivity: ComponentActivity()  {
     override fun onStop() {
         super.onStop()
         if(fileconn.busy)fileconn.cancel()
-        super.onDestroy()
     }
     @Preview
     @Composable
@@ -76,37 +76,50 @@ class PushActivity: ComponentActivity()  {
         var speedText by remember { mutableStateOf("0") }
         var imgSrc by remember { mutableIntStateOf(R.drawable.uploading) }
         LaunchedEffect(Unit) {
-            conn.init()
-
-                intent.data?.let{
-                    val file=UritoFile(uri = it,context = this@PushActivity)!!
-                    filename=file.name
-                    filesize = bytesToReadable(file.length())
-                    fileconn.sentFile(
-                        file = file,
-                        onError = { error, count ->
-                            runOnUiThread {
-                                Toast.makeText(this@PushActivity, "文件上传失败,$error", Toast.LENGTH_SHORT).show()
-                                imgSrc=R.drawable.fail
-                                btnText = "取消"
-                            }
-                        },
-                        onSuccess = { msg,count->
-                            runOnUiThread {
-                                Toast.makeText(this@PushActivity, "文件上传成功", Toast.LENGTH_SHORT).show()
-                                imgSrc=R.drawable.success
-                                btnText = "完成"
-                            }
-
-                        },
-                        onProgress = { p,preview,speed->
-                            progress=p
-                            chunkPreview=preview
-                            speedText=speed
-                        },
-                    )
-
-
+            try {
+                val uri = intent.data
+                if (uri == null) {
+                    Toast.makeText(this@PushActivity, "未选择文件", Toast.LENGTH_SHORT).show()
+                    imgSrc = R.drawable.fail
+                    return@LaunchedEffect
+                }
+                val file = UritoFile(uri = uri, context = this@PushActivity)
+                if (file == null) {
+                    Toast.makeText(this@PushActivity, "无法读取所选文件", Toast.LENGTH_SHORT).show()
+                    imgSrc = R.drawable.fail
+                    return@LaunchedEffect
+                }
+                filename = file.name
+                filesize = bytesToReadable(file.length())
+                fileconn.sentFile(
+                    file = file,
+                    onError = { error, count ->
+                        runOnUiThread {
+                            Toast.makeText(this@PushActivity, "文件上传失败,$error", Toast.LENGTH_SHORT).show()
+                            imgSrc = R.drawable.fail
+                            btnText = "取消"
+                        }
+                    },
+                    onSuccess = { msg, count ->
+                        runOnUiThread {
+                            Toast.makeText(this@PushActivity, "文件上传成功", Toast.LENGTH_SHORT).show()
+                            imgSrc = R.drawable.success
+                            btnText = "完成"
+                        }
+                    },
+                    onProgress = { p, preview, speed ->
+                        progress = p
+                        chunkPreview = preview
+                        speedText = speed
+                    },
+                )
+            } catch (e: Exception) {
+                Log.e("Push", "send fail", e)
+                runOnUiThread {
+                    Toast.makeText(this@PushActivity, "文件上传失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    imgSrc = R.drawable.fail
+                    btnText = "取消"
+                }
             }
         }
 

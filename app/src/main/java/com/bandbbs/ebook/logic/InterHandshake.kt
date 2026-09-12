@@ -22,7 +22,7 @@ class InterHandshake(context: Context,val scope: CoroutineScope) : Interconn(con
     private val handler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
 
-    override val onMessageListener = OnMessageReceivedListener{ _, message -> // 收到手表端应用发来的消息
+    override val onMessageListener = OnMessageReceivedListener{ _, data -> // 收到手表端应用发来的消息
         //重置计时器
         timeoutRunnable?.let { handler.removeCallbacks(it) }
         timeoutRunnable = Runnable {
@@ -32,10 +32,16 @@ class InterHandshake(context: Context,val scope: CoroutineScope) : Interconn(con
             onDisconnected.invoke()
         }
         handler.postDelayed(timeoutRunnable!!, TIMEOUT)
-        val message = message.decodeToString()
+        val message = data?.decodeToString() ?: return@OnMessageReceivedListener
         Log.d("InterconnIn",message)
-        val msg = json.decodeFromString<Message>(message)
-        onMessage[msg.tag]?.invoke(message)
+        try {
+            val msg = json.decodeFromString<Message>(message)
+            handler.post {
+                onMessage[msg.tag]?.invoke(message)
+            }
+        } catch (e: Exception) {
+            Log.e("InterconnIn", "decode fail", e)
+        }
     }
 
     init {

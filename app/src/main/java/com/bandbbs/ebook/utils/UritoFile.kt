@@ -19,7 +19,8 @@ fun UritoFile(uri: Uri?, context: Context): File? {
     if (uri == null) return file
     //android10以上转换
     if (uri.scheme == ContentResolver.SCHEME_FILE) {
-        file = File(uri.path!!)
+        val path = uri.path ?: return null
+        file = File(path)
     } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
         //把文件复制到沙盒目录
         val contentResolver = context.contentResolver
@@ -34,15 +35,15 @@ fun UritoFile(uri: Uri?, context: Context): File? {
                 ).toString() + "." + MimeTypeMap.getSingleton().getExtensionFromMimeType(contentResolver.getType(uri)))
 
         try {
-            val `is`: InputStream = contentResolver.openInputStream(uri)!!
+            val inputStream = contentResolver.openInputStream(uri) ?: return null
             val cache = File(context.cacheDir.absolutePath, displayName)
             val fos = FileOutputStream(cache)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                FileUtils.copy(`is`, fos)
+                FileUtils.copy(inputStream, fos)
             }
             file = cache
             fos.close()
-            `is`.close()
+            inputStream.close()
         } catch (e: IOException) {
             e.printStackTrace()
         }

@@ -19,9 +19,9 @@ class InterconnetFile(private val conn: InterHandshake) {
     private lateinit var chunks: List<String>
     private lateinit var file: File
     private var lastChunkTime: Long = 0
-    private lateinit var onError: (message: String, count: Int) -> Unit
-    private lateinit var onSuccess: (message: String, count: Int) -> Unit
-    private lateinit var onProgress: (progress: Double, chunkPreview: String, status: String) -> Unit
+    private var onError: (message: String, count: Int) -> Unit = { _, _ -> }
+    private var onSuccess: (message: String, count: Int) -> Unit = { _, _ -> }
+    private var onProgress: (progress: Double, chunkPreview: String, status: String) -> Unit = { _, _, _ -> }
     var busy=false
     init {
         conn.addListener("file") listener@{
@@ -36,10 +36,11 @@ class InterconnetFile(private val conn: InterHandshake) {
                              conn.destroy()
                              return@listener
                          }
-                        if (jsonMessage.found&& jsonMessage.length?.toInt()!! >0) {
-                            val currentChunk = jsonMessage.length / FILE_SIZE
-                            if(currentChunk.toInt()>chunks.size)sendNextChunk(0, true)
-                            else sendNextChunk(currentChunk.toInt(), true)
+                        val existingLength = jsonMessage.length?.toInt() ?: 0
+                        if (jsonMessage.found && existingLength > 0) {
+                            val currentChunk = existingLength / FILE_SIZE
+                            if(currentChunk >= chunks.size)sendNextChunk(0, true)
+                            else sendNextChunk(currentChunk, true)
                         }else{
                             sendNextChunk(0)
                         }
@@ -51,6 +52,7 @@ class InterconnetFile(private val conn: InterHandshake) {
                     "success" -> {
                         busy = false
                         val jsonMessage = json.decodeFromString<FileMessagesFromDevice.Success>(it)
+                        onProgress(1.0, "", " --")
                         onSuccess(jsonMessage.message, jsonMessage.count)
                         conn.destroy()
                     }
@@ -78,20 +80,32 @@ class InterconnetFile(private val conn: InterHandshake) {
         onProgress: (progress: Double, String, status: String) -> Unit,
     ) {
         conn.init()
-        conn.destroy().await()
         conn.registerListener().await()
         conn.setOnDisconnected {
             onError("连接断开", 0)
         }
         this.file = file
+        this.onError = onError
+        this.onSuccess = onSuccess
+        this.onProgress = onProgress
         //将文本文档分割成多个分块并发送
         val chunkSize = FILE_SIZE
         // Read raw bytes and detect charset automatically
-        val fileBytes = file.readBytes()
-        val detected = detectCharset(fileBytes)
-        val content = fileBytes.toString(Charset.forName(detected))
-        // Chunk the decoded content by UTF-8 bytes
-        chunks = content.chunkedByBytes(chunkSize, charset = Charsets.UTF_16LE)
+        try {
+            val fileBytes = file.readBytes()
+            val detected = detectCharset(fileBytes)
+            val content = fileBytes.toString(Charset.forName(detected))
+            // Chunk the decoded content by UTF-8 bytes
+            chunks = content.chunkedByBytes(chunkSize, charset = Charsets.UTF_16LE)
+        } catch (e: Exception) {
+            Log.e("File", "read fail", e)
+            onError("文件读取失败: ${e.message}", 0)
+            return
+        }
+        if (chunks.isEmpty()) {
+            onError("文件内容为空", 0)
+            return
+        }
         busy = true
         onProgress(0.0,chunks[0]," --")
         delay(1000L) //等待应用打开
@@ -103,9 +117,6 @@ class InterconnetFile(private val conn: InterHandshake) {
                 )
             )
         )
-        this.onError = onError
-        this.onSuccess = onSuccess
-        this.onProgress = onProgress
         Log.d("File", "sentFile")
     }
     private fun detectCharset(bytes: ByteArray): String {
@@ -120,34 +131,33 @@ class InterconnetFile(private val conn: InterHandshake) {
         currentChunk: Int,
         isReSend:Boolean=false
     ){
-            val chunk = chunks[currentChunk]
-            val message = FileMessagesToSend.DataChunk(
-                count = currentChunk,
-                data = chunk,
-                setCount = if (isReSend) currentChunk else null
-            )
-            // Calculate speed
-            val currentTime = System.currentTimeMillis()
-            if (lastChunkTime != 0L) {
-                val timeTaken = currentTime - lastChunkTime
+        if (!busy) return
+        if (currentChunk < 0 || currentChunk >= chunks.size) return
+        val chunk = chunks[currentChunk]
+        val message = FileMessagesToSend.DataChunk(
+            count = currentChunk,
+            data = chunk,
+            setCount = if (isReSend) currentChunk else null
+        )
+        // Calculate speed
+        val currentTime = System.currentTimeMillis()
+        if (lastChunkTime != 0L) {
+            val timeTaken = currentTime - lastChunkTime
+            if (timeTaken > 0) {
                 val speed = bytesToReadable(FILE_SIZE / (timeTaken / 1000.0))
-                val remainingTime = (chunks.size - currentChunk) * (currentTime - lastChunkTime) / 1000.0
-                onProgress(currentChunk.toDouble()/chunks.size, chunks[currentChunk], " $speed/s ${remainingTime.toInt()}s")
+                val remainingTime = (chunks.size - currentChunk) * timeTaken / 1000.0
+                onProgress(currentChunk.toDouble()/chunks.size, chunk, " $speed/s ${remainingTime.toInt()}s")
             } else {
-                onProgress(currentChunk.toDouble()/chunks.size, chunks[currentChunk], " --")
+                onProgress(currentChunk.toDouble()/chunks.size, chunk, " --")
             }
-            lastChunkTime = currentTime
-            conn.sendMessage(json.encodeToString(message)).invokeOnCompletion {
-                if (it != null) {
-                    onError("发送失败", currentChunk)
-                }
+        } else {
+            onProgress(currentChunk.toDouble()/chunks.size, chunk, " --")
+        }
+        lastChunkTime = currentTime
+        conn.sendMessage(json.encodeToString(message)).invokeOnCompletion {
+            if (it != null) {
+                onError("发送失败", currentChunk)
             }
-        if (currentChunk >= chunks.size-1){
-            busy=false
-            onProgress(1.0,chunks[0]," --")
-            onSuccess("传输完成", chunks.size)
-            conn.setOnDisconnected {  }
-            conn.destroy()
         }
 
         Log.d("File","sendNextChunk$currentChunk")

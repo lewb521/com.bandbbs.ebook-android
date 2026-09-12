@@ -1,14 +1,37 @@
-## 提示
+# 手环电子书同步器（安卓端）
 
-项目已转交至[爅峫](https://github.com/youshen2)维护，本仓库仅作留档，若要使用推荐前往下方的**优秀分支-弦电子书**了解详情
+配套 [com.bandbbs.ebook](https://github.com/lewb521/com.bandbbs.ebook)（手环端电子书阅读器）的安卓同步客户端，用于把手机上的 txt 电子书推送到小米手环阅读。
 
-## 相关资源
+## 功能
 
-### 优秀分支-弦电子书
-https://github.com/youshen2/com.bandbbs.ebook-android
+- 选择手机里的 txt 电子书
+- 通过小米互联 SDK 与手环端握手，远程打开 `pages/push` 路由并传输
+- 支持中文字符编码自动识别（juniversalchardet）
 
-### 喵喵电子书多端设计稿  
-https://mastergo.com/goto/KWzbQtxB?file=165290124574010  
+## 使用步骤
 
-### 喵喵电子书 Vela 客户端  
-https://github.com/BandBBS-Vela-Dev/com.bandbbs.ebook
+1. 手环已安装并打开手环端应用；手机与手环已在小米运动健康中配对。
+2. 打开同步器，选择要推送的 txt 电子书。
+3. 确认后自动连接手环并开始传输，手环端进入同步页接收。
+
+## 构建
+
+环境要求：JDK 17、Android SDK（`compileSdk = 36`）。
+
+1. 在项目根目录放入你的签名文件：
+   - `watchface.keystore`
+   - `keystore.properties`（内容包含 `storePassword`、`keyAlias`、`keyPassword`）
+2. 执行：
+
+```bash
+./gradlew assembleDebug
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
+
+## 开源许可
+
+AGPL-3.0，详见 [LICENSE](./LICENSE)。
+
+## 上游出处
+
+本项目基于 [BandBBS-Vela-Dev/com.bandbbs.ebook-android](https://github.com/BandBBS-Vela-Dev/com.bandbbs.ebook-android)（喵喵电子书同步器）。
